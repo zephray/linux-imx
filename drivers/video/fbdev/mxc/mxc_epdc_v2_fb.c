@@ -359,6 +359,23 @@ static struct fb_videomode e97_v110_mode = {
 	.flag = 0,
 };
 
+static struct fb_videomode es103tc1_mode = {
+	.name = "ES103TC1",
+	.refresh = 130,
+	.xres = 1872,
+	.yres = 1404,
+	.pixclock = 96000000,
+	.left_margin = 8,
+	.right_margin = 42,
+	.upper_margin = 4,
+	.lower_margin = 5,
+	.hsync_len = 12,
+	.vsync_len = 1,
+	.sync = 0,
+	.vmode = FB_VMODE_NONINTERLACED,
+	.flag = 0,
+};
+
 static struct imx_epdc_fb_mode panel_modes[] = {
 	{
 		&ed060xh2c1mode,	/* struct fb_videomode *mode */
@@ -424,7 +441,20 @@ static struct imx_epdc_fb_mode panel_modes[] = {
 		0,      /* gdoe_offs */
 		1,      /* gdclk_offs */
 		3,      /* num_ce */
-	}
+	},
+	{
+		&es103tc1_mode,
+		4, 	/* vscan_holdoff */
+		10, 	/* sdoed_width */
+		20, 	/* sdoed_delay */
+		10, 	/* sdoez_width */
+		20, 	/* sdoez_delay */
+		450, 	/* GDCLK_HP */
+		280, 	/* GDSP_OFF */
+		0, 	/* GDOE_OFF */
+		19, 	/* gdclk_offs */
+		1, 	/* num_ce */
+	},
 };
 
 static struct imx_epdc_fb_platform_data epdc_data = {
@@ -478,6 +508,7 @@ static int epdc_working_buffer_update(struct mxc_epdc_fb_data *fb_data,
 				      struct update_data_list *upd_data_list,
 				      struct mxcfb_rect *update_region);
 extern void pxp_get_collision_info(struct pxp_collision_info *info);
+static void mxc_epdc_restore_qos(struct mxc_epdc_fb_data *data);
 
 #ifdef DEBUG
 static void dump_pxp_config(struct mxc_epdc_fb_data *fb_data,
@@ -1289,10 +1320,16 @@ static void epdc_init_settings(struct mxc_epdc_fb_data *fb_data)
 	 * SDDO_WIDTH = 8bit
 	 * PIXELS_PER_SDCLK = 4
 	 */
+	/*reg_val =
+	    ((epdc_mode->vscan_holdoff << EPDC_TCE_CTRL_VSCAN_HOLDOFF_OFFSET) &
+	     EPDC_TCE_CTRL_VSCAN_HOLDOFF_MASK)
+	    | EPDC_TCE_CTRL_PIXELS_PER_SDCLK_4;*/
 	reg_val =
 	    ((epdc_mode->vscan_holdoff << EPDC_TCE_CTRL_VSCAN_HOLDOFF_OFFSET) &
 	     EPDC_TCE_CTRL_VSCAN_HOLDOFF_MASK)
-	    | EPDC_TCE_CTRL_PIXELS_PER_SDCLK_4;
+		| EPDC_TCE_CTRL_SCAN_DIR_0_UP
+		| EPDC_TCE_CTRL_SDDO_WIDTH_16BIT
+	    | EPDC_TCE_CTRL_PIXELS_PER_SDCLK_8;
 	__raw_writel(reg_val, EPDC_TCE_CTRL);
 
 	/* EPDC_TCE_HSCAN */
@@ -2740,7 +2777,7 @@ static int epdc_submit_merge(struct update_desc_list *upd_desc_list,
 	/* Merged update should take on the earliest order */
 	upd_desc_list->update_order =
 		(upd_desc_list->update_order > update_to_merge->update_order) ?
-		upd_desc_list->update_order : update_to_merge->update_order;
+		update_to_merge->update_order : upd_desc_list->update_order;
 
 	return MERGE_OK;
 }
@@ -4779,6 +4816,10 @@ static void mxc_epdc_fb_fw_handler(const struct firmware *fw,
 				rounded_pix_clk);
 	}
 
+	dev_warn(fb_data->dev, "EPDC pix clk"
+				"desired = %lu, actual = %lu\n", target_pix_clk,
+				rounded_pix_clk);
+
 	clk_set_rate(fb_data->epdc_clk_pix, rounded_pix_clk);
 
 	/* Enable pix clk for EPDC */
@@ -4991,6 +5032,8 @@ static int mxc_epdc_fb_probe(struct platform_device *pdev)
 	if (IS_ERR(fb_data->qos_regmap)) {
 		dev_warn(&pdev->dev, "No qos phandle specified. Ignored.\n");
 	}
+
+	mxc_epdc_restore_qos(fb_data);
 
 	/* Get platform data and check validity */
 	fb_data->pdata = &epdc_data;
