@@ -239,6 +239,11 @@ struct mxc_epdc_fb_data {
 
 	/* qos */
 	struct regmap *qos_regmap;
+
+	/* dirty lines */
+	spinlock_t dirty_lock;
+	unsigned int dirty_lines_start;
+	unsigned int dirty_lines_end;
 };
 
 struct waveform_data_header {
@@ -3779,10 +3784,14 @@ static void mxc_epdc_fb_update_pages(struct mxc_epdc_fb_data *fb_data,
 	update.update_region.width = fb_data->epdc_fb_var.xres;
 	update.update_region.top = y1;
 	update.update_region.height = y2 - y1;
-	update.waveform_mode = WAVEFORM_MODE_AUTO;
-	update.update_mode = UPDATE_MODE_FULL;
+	//update.update_region.top = 0;
+	//update.update_region.height = fb_data->epdc_fb_var.yres;
+	update.waveform_mode = 0x6; // A2
+	update.update_mode = UPDATE_MODE_PARTIAL;
 	update.update_marker = 0;
 	update.temp = TEMP_USE_AMBIENT;
+	update.dither_mode = 1;
+	update.quant_bit = 1;
 	update.flags = 0;
 
 	mxc_epdc_fb_send_update(&update, &fb_data->info);
@@ -3793,29 +3802,40 @@ static void mxc_epdc_fb_deferred_io(struct fb_info *info,
 				    struct list_head *pagelist)
 {
 	struct mxc_epdc_fb_data *fb_data = (struct mxc_epdc_fb_data *)info;
+	unsigned int dirty_lines_start, dirty_lines_end;
 	struct page *page;
-	unsigned long beg, end;
-	int y1, y2, miny, maxy;
+	unsigned long index;
+	unsigned int y_low = 0, y_high = 0;
+	int count = 0;
 
 	if (fb_data->auto_mode != AUTO_UPDATE_MODE_AUTOMATIC_MODE)
 		return;
 
-	miny = INT_MAX;
-	maxy = 0;
+	spin_lock(&fb_data->dirty_lock);
+	dirty_lines_start = fb_data->dirty_lines_start;
+	dirty_lines_end = fb_data->dirty_lines_end;
+	/* set display line markers as clean */
+	fb_data->dirty_lines_start = fb_data->info.var.yres - 1;
+	fb_data->dirty_lines_end = 0;
+	spin_unlock(&fb_data->dirty_lock);
+
 	list_for_each_entry(page, pagelist, lru) {
-		beg = page->index << PAGE_SHIFT;
-		end = beg + PAGE_SIZE - 1;
-		y1 = beg / info->fix.line_length;
-		y2 = end / info->fix.line_length;
-		if (y2 >= fb_data->epdc_fb_var.yres)
-			y2 = fb_data->epdc_fb_var.yres - 1;
-		if (miny > y1)
-			miny = y1;
-		if (maxy < y2)
-			maxy = y2;
+		count++;
+		index = page->index << PAGE_SHIFT;
+		y_low = index / info->fix.line_length;
+		y_high = (index + PAGE_SIZE - 1) / info->fix.line_length;
+		dev_dbg(info->device,
+			"page->index=%lu y_low=%d y_high=%d\n",
+			page->index, y_low, y_high);
+		if (y_high > info->var.yres - 1)
+			y_high = info->var.yres - 1;
+		if (y_low < dirty_lines_start)
+			dirty_lines_start = y_low;
+		if (y_high > dirty_lines_end)
+			dirty_lines_end = y_high;
 	}
 
-	mxc_epdc_fb_update_pages(fb_data, miny, maxy);
+	mxc_epdc_fb_update_pages(fb_data, dirty_lines_start, dirty_lines_end);
 }
 
 void mxc_epdc_fb_flush_updates(struct mxc_epdc_fb_data *fb_data)
@@ -3962,6 +3982,68 @@ static int mxc_epdc_fb_pan_display(struct fb_var_screeninfo *var,
 	return 0;
 }
 
+static struct fb_deferred_io mxc_epdc_fb_defio = {
+	.delay = HZ / 10,
+	.deferred_io = mxc_epdc_fb_deferred_io,
+};
+
+static void mxc_epdc_mkdirty(struct fb_info *info, int y, int height)
+{
+	struct fb_deferred_io *fbdefio = &mxc_epdc_fb_defio;
+	struct mxc_epdc_fb_data *fb_data = (struct mxc_epdc_fb_data *)info;
+
+	if (y == -1) {
+		y = 0;
+		height = info->var.yres - 1;
+	}
+
+	spin_lock(&fb_data->dirty_lock);
+	if (y < fb_data->dirty_lines_start)
+		fb_data->dirty_lines_start = y;
+	if (y + height - 1 > fb_data->dirty_lines_end)
+		fb_data->dirty_lines_end = y + height - 1;
+	spin_unlock(&fb_data->dirty_lock);
+
+	/* Schedule deferred_io to update display (no-op if already on queue)*/
+	schedule_delayed_work(&info->deferred_work, fbdefio->delay);
+}
+
+static void mxc_epdc_fillrect(struct fb_info *info,
+			      const struct fb_fillrect *rect)
+{
+	sys_fillrect(info, rect);
+
+	mxc_epdc_mkdirty(info, rect->dy, rect->height);
+}
+
+static void mxc_epdc_copyarea(struct fb_info *info,
+			      const struct fb_copyarea *area)
+{
+	sys_copyarea(info, area);
+
+	mxc_epdc_mkdirty(info, area->dy, area->height);
+}
+
+static void mxc_epdc_imageblit(struct fb_info *info,
+			       const struct fb_image *image)
+{
+	sys_imageblit(info, image);
+
+	mxc_epdc_mkdirty(info, image->dy, image->height);
+}
+
+static ssize_t mxc_epdc_write(struct fb_info *info, const char __user *buf,
+			      size_t count, loff_t *ppos)
+{
+	ssize_t res;
+	
+	res = fb_sys_write(info, buf, count, ppos);
+
+	mxc_epdc_mkdirty(info, -1, 0);
+
+	return res;
+}
+
 static struct fb_ops mxc_epdc_fb_ops = {
 	.owner = THIS_MODULE,
 	.fb_check_var = mxc_epdc_fb_check_var,
@@ -3972,14 +4054,16 @@ static struct fb_ops mxc_epdc_fb_ops = {
 	.fb_ioctl = mxc_epdc_fb_ioctl,
 	.fb_mmap = mxc_epdc_fb_mmap,
 	.fb_blank = mxc_epdc_fb_blank,
+#ifdef CONFIG_FB_MXC_EINK_AUTO_UPDATE_MODE
+	.fb_fillrect = mxc_epdc_fillrect,
+	.fb_copyarea = mxc_epdc_copyarea,
+	.fb_imageblit = mxc_epdc_imageblit,
+	.fb_write = mxc_epdc_write
+#else
 	.fb_fillrect = cfb_fillrect,
 	.fb_copyarea = cfb_copyarea,
 	.fb_imageblit = cfb_imageblit,
-};
-
-static struct fb_deferred_io mxc_epdc_fb_defio = {
-	.delay = HZ,
-	.deferred_io = mxc_epdc_fb_deferred_io,
+#endif
 };
 
 static void epdc_done_work_func(struct work_struct *work)
@@ -5033,8 +5117,6 @@ static int mxc_epdc_fb_probe(struct platform_device *pdev)
 		dev_warn(&pdev->dev, "No qos phandle specified. Ignored.\n");
 	}
 
-	mxc_epdc_restore_qos(fb_data);
-
 	/* Get platform data and check validity */
 	fb_data->pdata = &epdc_data;
 	if ((fb_data->pdata == NULL) || (fb_data->pdata->num_modes < 1)
@@ -5245,7 +5327,9 @@ static int mxc_epdc_fb_probe(struct platform_device *pdev)
 
 	mxc_epdc_fb_set_fix(info);
 
-	fb_data->auto_mode = AUTO_UPDATE_MODE_REGION_MODE;
+	spin_lock_init(&fb_data->dirty_lock);
+
+	fb_data->auto_mode = AUTO_UPDATE_MODE_AUTOMATIC_MODE;
 	fb_data->upd_scheme = UPDATE_SCHEME_QUEUE_AND_MERGE;
 
 	/* Initialize our internal copy of the screeninfo */
@@ -5615,6 +5699,8 @@ static int mxc_epdc_fb_probe(struct platform_device *pdev)
 	fb_data->updates_active = false;
 	fb_data->pwrdown_delay = 0;
 
+	mxc_epdc_restore_qos(fb_data);
+
 	/* Register FB */
 	ret = register_framebuffer(info);
 	if (ret) {
@@ -5751,7 +5837,7 @@ out:
 static void mxc_epdc_restore_qos(struct mxc_epdc_fb_data *data)
 {
 	if (IS_ERR_OR_NULL(data->qos_regmap)) {
-		dev_dbg(data->dev, "no QoS setting found.\n");
+		dev_err(data->dev, "no QoS setting found.\n");
 		return;
 	}
 
