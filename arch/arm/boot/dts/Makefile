@@ -646,6 +646,7 @@ dtb-$(CONFIG_SOC_IMX6UL) += \
 	imx6ull-9x9-evk-btwifi-oob.dtb \
 	imx6ull-colibri-eval-v3.dtb \
 	imx6ull-colibri-wifi-eval-v3.dtb \
+	imx6ull-nekoink.dtb \
 	imx6ull-phytec-segin-ff-rdk-nand.dtb \
 	imx6ull-phytec-segin-ff-rdk-emmc.dtb \
 	imx6ull-phytec-segin-lc-rdk-nand.dtb \
