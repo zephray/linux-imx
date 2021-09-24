@@ -381,6 +381,23 @@ static struct fb_videomode es103tc1_mode = {
 	.flag = 0,
 };
 
+static struct fb_videomode gdew101c01_mode = {
+	.name = "GDEW101C01",
+	.refresh = 85,
+	.xres = 2232,
+	.yres = 1680,
+	.pixclock = 96000000,
+	.left_margin = 8,
+	.right_margin = 42,
+	.upper_margin = 4,
+	.lower_margin = 4,
+	.hsync_len = 12,
+	.vsync_len = 1,
+	.sync = 0,
+	.vmode = FB_VMODE_NONINTERLACED,
+	.flag = 0,
+};
+
 static struct imx_epdc_fb_mode panel_modes[] = {
 	{
 		&ed060xh2c1mode,	/* struct fb_videomode *mode */
@@ -455,6 +472,19 @@ static struct imx_epdc_fb_mode panel_modes[] = {
 		10, 	/* sdoez_width */
 		20, 	/* sdoez_delay */
 		450, 	/* GDCLK_HP */
+		280, 	/* GDSP_OFF */
+		0, 	/* GDOE_OFF */
+		19, 	/* gdclk_offs */
+		1, 	/* num_ce */
+	},
+	{
+		&gdew101c01_mode,
+		4, 	/* vscan_holdoff */
+		10, 	/* sdoed_width */
+		20, 	/* sdoed_delay */
+		10, 	/* sdoez_width */
+		20, 	/* sdoez_delay */
+		566, 	/* GDCLK_HP */
 		280, 	/* GDSP_OFF */
 		0, 	/* GDOE_OFF */
 		19, 	/* gdclk_offs */
@@ -1332,7 +1362,7 @@ static void epdc_init_settings(struct mxc_epdc_fb_data *fb_data)
 	reg_val =
 	    ((epdc_mode->vscan_holdoff << EPDC_TCE_CTRL_VSCAN_HOLDOFF_OFFSET) &
 	     EPDC_TCE_CTRL_VSCAN_HOLDOFF_MASK)
-		| EPDC_TCE_CTRL_SCAN_DIR_0_UP
+		//| EPDC_TCE_CTRL_SCAN_DIR_0_UP
 		| EPDC_TCE_CTRL_SDDO_WIDTH_16BIT
 	    | EPDC_TCE_CTRL_PIXELS_PER_SDCLK_8;
 	__raw_writel(reg_val, EPDC_TCE_CTRL);
