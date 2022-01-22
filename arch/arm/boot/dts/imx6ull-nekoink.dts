@@ -52,16 +52,9 @@
 		#reset-cells = <0>;
 	};
 
-	reg_wlan_vmmc: regulator-wlan-vmmc {
-		compatible = "regulator-fixed";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_wlan_vmmc>;
-		regulator-name = "reg_wlan_vmmc";
-		regulator-min-microvolt = <3300000>;
-		regulator-max-microvolt = <3300000>;
-		gpio = <&gpio3 18 GPIO_ACTIVE_HIGH>;
-		startup-delay-us = <70000>;
-		enable-active-high;
+	usdhc2_pwrseq: usdhc2_pwrseq {
+		compatible = "mmc-pwrseq-simple";
+		reset-gpios = <&gpio3 18 GPIO_ACTIVE_LOW>;
 	};
 };
 
@@ -301,19 +294,16 @@
 	pinctrl-0 = <&pinctrl_usdhc2>;
 	bus-width = <4>;
 	no-1-8-v;
-	no-mmc;
 	non-removable;
-	vmmc-supply = <&reg_wlan_vmmc>;
+	mmc-pwrseq = <&usdhc2_pwrseq>;
+	pm-ignore-notify;
 	cap-power-off-card;
-	keep-power-in-suspend;
-	wakeup-source;
+	/delete-property/ enable-sdio-wakeup;
 	status = "okay";
 
 	brcmf: wifi@1 {
 		reg = <1>;
 		compatible = "brcm,bcm4329-fmac";
-		pinctrl-names = "default";
-		pinctrl-0 = <&pinctrl_wlan_irq>;
 		interrupt-parent = <&gpio3>;
 		interrupts = <19 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-names = "host-wake";
@@ -327,18 +317,8 @@
 	pinctrl_hog: hoggrp {
 		fsl,pins = <
 			MX6UL_PAD_SNVS_TAMPER7__GPIO5_IO07	0x0b0b0 /* PMU_IRQ */
-		>;
-	};
-
-	pinctrl_wlan_vmmc: wlan-vmmcgrp {
-		fsl,pins = <
-			MX6UL_PAD_LCD_DATA13__GPIO3_IO18    0x17059 /* WLAN_EN */
-		>;
-	};
-
-	pinctrl_wlan_irq: wlanirqgrp {
-		fsl,pins = <
-			MX6UL_PAD_LCD_DATA14__GPIO3_IO19	0x0b0b0 /* WLAN_IRQ */
+			MX6UL_PAD_LCD_DATA14__GPIO3_IO19	0x13069 /* WLAN_IRQ */
+			MX6UL_PAD_LCD_DATA13__GPIO3_IO18    0x13069 /* WLAN_EN */
 		>;
 	};
 
