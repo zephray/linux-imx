@@ -74,6 +74,11 @@
 		reg = <0x34>;
 		interrupt-parent = <&gpio5>;
 		interrupts = <7 IRQ_TYPE_LEVEL_LOW>;
+
+		interrupt-controller;
+		#interrupt-cells = <1>;
+
+		status = "okay";
 	};
 
 	max17135: max17135@48 {
@@ -144,6 +149,17 @@
 				regulator-name = "V3P3";
 			};
 		};
+	};
+
+	touchscreen@5d {
+		compatible = "goodix,gt928";
+		reg = <0x5d>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_cap_touch>;
+		interrupt-parent = <&gpio3>;
+		interrupts = <26 IRQ_TYPE_LEVEL_LOW>;
+		irq-gpios = <&gpio3 26 GPIO_ACTIVE_HIGH>;
+		status = "okay";
 	};
 };
 
@@ -316,16 +332,22 @@
 
 	pinctrl_hog: hoggrp {
 		fsl,pins = <
-			MX6UL_PAD_SNVS_TAMPER7__GPIO5_IO07	0x0b0b0 /* PMU_IRQ */
+			MX6UL_PAD_SNVS_TAMPER7__GPIO5_IO07	0x1f0a0 /* PMU_IRQ, 22K IPU */
 			MX6UL_PAD_LCD_DATA14__GPIO3_IO19	0x13069 /* WLAN_IRQ */
 			MX6UL_PAD_LCD_DATA13__GPIO3_IO18    0x13069 /* WLAN_EN */
+		>;
+	};
+
+	pinctrl_cap_touch: captouchgrp {
+		fsl,pins = <
+			MX6UL_PAD_LCD_DATA21__GPIO3_IO26	0x13069 /* Touch Interrupt */
 		>;
 	};
 
 	pinctrl_bt_gpios: btgpiosgrp {
 		fsl,pins = <
 			MX6UL_PAD_LCD_DATA18__GPIO3_IO23	0x17059 /* BT_WAKE */
-			MX6UL_PAD_LCD_DATA22__GPIO3_IO27	0x0b0b0 /* BT_IRQ */
+			MX6UL_PAD_LCD_DATA22__GPIO3_IO27	0x13069 /* BT_IRQ */
 			MX6UL_PAD_LCD_DATA09__GPIO3_IO14    0x17059 /* BT_RST */
 		>;
 	};
@@ -384,8 +406,6 @@
 			MX6ULL_PAD_LCD_DATA05__EPDC_SDDO05     0x10
 			MX6ULL_PAD_LCD_DATA06__EPDC_SDDO06     0x10
 			MX6ULL_PAD_LCD_DATA07__EPDC_SDDO07     0x10
-			MX6ULL_PAD_LCD_DATA14__EPDC_SDSHR      0x10
-			MX6ULL_PAD_LCD_DATA15__EPDC_GDRL       0x10
 			MX6ULL_PAD_LCD_DATA16__EPDC_GDCLK      0x10
 			MX6ULL_PAD_LCD_DATA17__EPDC_GDSP       0x10
 		>;
