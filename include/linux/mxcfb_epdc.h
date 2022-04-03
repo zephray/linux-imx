@@ -18,6 +18,7 @@ struct imx_epdc_fb_mode {
     int gdoe_offs;
     int gdclk_offs;
     int num_ce;
+    int bus_width;
 };
 
 struct imx_epdc_fb_platform_data {

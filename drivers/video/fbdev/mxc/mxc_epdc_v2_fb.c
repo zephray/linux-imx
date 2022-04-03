@@ -398,6 +398,23 @@ static struct fb_videomode gdew101c01_mode = {
 	.flag = 0,
 };
 
+static struct fb_videomode ed133ut2_mode = {
+	.name = "ED133UT2",
+	.refresh = 75,
+	.xres = 1600,
+	.yres = 1200,
+	.pixclock = 85000000,
+	.left_margin = 20,
+	.right_margin = 56,
+	.upper_margin = 4,
+	.lower_margin = 7,
+	.hsync_len = 4,
+	.vsync_len = 1,
+	.sync = 0,
+	.vmode = FB_VMODE_NONINTERLACED,
+	.flag = 0,
+};
+
 static struct imx_epdc_fb_mode panel_modes[] = {
 	{
 		&ed060xh2c1mode,	/* struct fb_videomode *mode */
@@ -411,6 +428,7 @@ static struct imx_epdc_fb_mode panel_modes[] = {
 		0, 	/* GDOE_OFF */
 		19, 	/* gdclk_offs */
 		1, 	/* num_ce */
+		8,  /* bus_width */
 	},
 	{
 		&e60_v110_mode,
@@ -424,6 +442,7 @@ static struct imx_epdc_fb_mode panel_modes[] = {
 		0,      /* gdoe_offs */
 		1,      /* gdclk_offs */
 		1,      /* num_ce */
+		8,      /* bus_width */
 	},
 	{
 		&e60_v220_mode,
@@ -437,6 +456,7 @@ static struct imx_epdc_fb_mode panel_modes[] = {
 		0,      /* gdoe_offs */
 		9,      /* gdclk_offs */
 		1,      /* num_ce */
+		8,      /* bus_width */
 	},
 	{
 		&e060scm_mode,
@@ -450,6 +470,7 @@ static struct imx_epdc_fb_mode panel_modes[] = {
 		0,      /* gdoe_offs */
 		5,      /* gdclk_offs */
 		1,      /* num_ce */
+		8,      /* bus_width */
 	},
 	{
 		&e97_v110_mode,
@@ -463,32 +484,49 @@ static struct imx_epdc_fb_mode panel_modes[] = {
 		0,      /* gdoe_offs */
 		1,      /* gdclk_offs */
 		3,      /* num_ce */
+		8,      /* bus_width */
 	},
 	{
 		&es103tc1_mode,
-		4, 	/* vscan_holdoff */
+		4,      /* vscan_holdoff */
 		10, 	/* sdoed_width */
 		20, 	/* sdoed_delay */
 		10, 	/* sdoez_width */
 		20, 	/* sdoez_delay */
 		450, 	/* GDCLK_HP */
 		280, 	/* GDSP_OFF */
-		0, 	/* GDOE_OFF */
+		0, 	    /* GDOE_OFF */
 		19, 	/* gdclk_offs */
-		1, 	/* num_ce */
+		1,      /* num_ce */
+		16,     /* bus_width */
 	},
 	{
 		&gdew101c01_mode,
-		4, 	/* vscan_holdoff */
+		4,      /* vscan_holdoff */
 		10, 	/* sdoed_width */
 		20, 	/* sdoed_delay */
 		10, 	/* sdoez_width */
 		20, 	/* sdoez_delay */
 		566, 	/* GDCLK_HP */
 		280, 	/* GDSP_OFF */
-		0, 	/* GDOE_OFF */
+		0,      /* GDOE_OFF */
 		19, 	/* gdclk_offs */
-		1, 	/* num_ce */
+		1,      /* num_ce */
+		16,     /* bus_width */
+	},
+	{
+		&ed133ut2_mode,
+		4,      /* vscan_holdoff */
+		10,     /* sdoed_width */
+		20,     /* sdoed_delay */
+		10,     /* sdoez_width */
+		20,     /* sdoez_delay */
+		700,    /* gdclk_hp_offs */
+		481,    /* gdsp_offs */
+		0,      /* gdoe_offs */
+		39,     /* gdclk_offs */
+		1,      /* num_ce */
+		8,      /* bus_width */
 	},
 };
 
@@ -869,7 +907,7 @@ static inline void epdc_set_temp(u32 temp)
 	/* used to store external panel temperature value */
 	unsigned int ext_temp, ext_temp_index = temp;
 
-	if (temp == DEFAULT_TEMP_INDEX) {
+	/*if (temp == DEFAULT_TEMP_INDEX) {
 		ret = max17135_reg_read(REG_MAX17135_EXT_TEMP, &ext_temp);
 		if (ret == 0) {
 			ext_temp = ext_temp >> 8;
@@ -877,7 +915,7 @@ static inline void epdc_set_temp(u32 temp)
 				ext_temp);
 			ext_temp_index = mxc_epdc_fb_get_temp_index(g_fb_data, ext_temp);
 		}
-	}
+	}*/
 
 	__raw_writel(ext_temp_index, EPDC_TEMP);
 }
@@ -1361,10 +1399,16 @@ static void epdc_init_settings(struct mxc_epdc_fb_data *fb_data)
 	    | EPDC_TCE_CTRL_PIXELS_PER_SDCLK_4;*/
 	reg_val =
 	    ((epdc_mode->vscan_holdoff << EPDC_TCE_CTRL_VSCAN_HOLDOFF_OFFSET) &
-	     EPDC_TCE_CTRL_VSCAN_HOLDOFF_MASK)
+	     EPDC_TCE_CTRL_VSCAN_HOLDOFF_MASK);
 		//| EPDC_TCE_CTRL_SCAN_DIR_0_UP
-		| EPDC_TCE_CTRL_SDDO_WIDTH_16BIT
-	    | EPDC_TCE_CTRL_PIXELS_PER_SDCLK_8;
+
+	if (epdc_mode->bus_width == 8) {
+		reg_val |= EPDC_TCE_CTRL_PIXELS_PER_SDCLK_4;
+	}
+	else {
+		reg_val |= EPDC_TCE_CTRL_SDDO_WIDTH_16BIT
+			| EPDC_TCE_CTRL_PIXELS_PER_SDCLK_8;
+	}
 	__raw_writel(reg_val, EPDC_TCE_CTRL);
 
 	/* EPDC_TCE_HSCAN */
